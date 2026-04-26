@@ -8,7 +8,7 @@ import {
   Calculator, Building2, Wallet, ArrowUpRight, ArrowDownRight,
   RefreshCw, Shield, Target, Lightbulb,
   FileText, BarChart3, Menu, CircleDollarSign,
-  Lock, UserPlus, Users, LogIn, Download, Upload, Database
+  Lock, User as UserIcon, UserPlus, Users, LogIn, Download, Upload, Database
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -441,7 +441,7 @@ export default function Home() {
           </nav>
           <div className="p-3 border-t">
             <div className="flex items-center gap-2 px-3 py-2">
-              <div className="h-8 w-8 bg-emerald-100 rounded-full flex items-center justify-center"><User className="h-4 w-4 text-emerald-600" /></div>
+              <div className="h-8 w-8 bg-emerald-100 rounded-full flex items-center justify-center"><UserIcon className="h-4 w-4 text-emerald-600" /></div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{authUser?.name || ''}</p>
                 <p className="text-xs text-gray-400">{authUser?.role === 'admin' ? 'Administrador' : 'Usuario'}</p>
