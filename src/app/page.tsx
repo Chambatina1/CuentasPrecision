@@ -28,7 +28,7 @@ import {
   PieChart, Pie, Cell
 } from 'recharts'
 import {
-  db, generateId, simpleHash, seedDatabase,
+  getDB, generateId, simpleHash, seedDatabase,
   exportAllData, importAllData,
   type Business, type Transaction, type TaxRate, type ExchangeRate, type AlertItem, type User
 } from '@/lib/db-client'
@@ -68,7 +68,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
   const handleLogin = async () => {
     setLoading(true); setError('')
     try {
-      const user = await db.users.where('username').equals(username).first()
+      const user = await getDB().users.where('username').equals(username).first()
       if (!user) { setError('Usuario no encontrado'); setLoading(false); return }
       if (!user.isActive) { setError('Usuario desactivado. Contacte al administrador.'); setLoading(false); return }
       const hash = await simpleHash(password)
@@ -170,12 +170,12 @@ export default function Home() {
   const loadAll = useCallback(async () => {
     setLoading(true)
     const [bz, tx, tr, er, al, us] = await Promise.all([
-      db.businesses.toArray(),
-      db.transactions.toArray(),
-      db.taxRates.toArray(),
-      db.exchangeRates.orderBy('date').reverse().limit(30).toArray(),
-      db.alerts.orderBy('createdAt').reverse().limit(50).toArray(),
-      db.users.toArray()
+      getDB().businesses.toArray(),
+      getDB().transactions.toArray(),
+      getDB().taxRates.toArray(),
+      getDB().exchangeRates.orderBy('date').reverse().limit(30).toArray(),
+      getDB().alerts.orderBy('createdAt').reverse().limit(50).toArray(),
+      getDB().users.toArray()
     ])
     setBusinesses(bz as Business[])
     setTransactions(tx as Transaction[])
@@ -230,10 +230,10 @@ export default function Home() {
   const handleSaveBusiness = async () => {
     if (!bizForm.name) return
     if (bizForm.id) {
-      await db.businesses.update(bizForm.id, { ...bizForm, updatedAt: new Date().toISOString() } as any)
+      await getDB().businesses.update(bizForm.id, { ...bizForm, updatedAt: new Date().toISOString() } as any)
     } else {
       const id = generateId()
-      await db.businesses.add({ ...bizForm, id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), currency: 'CUP' } as any)
+      await getDB().businesses.add({ ...bizForm, id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), currency: 'CUP' } as any)
       if (!selectedBusiness) setSelectedBusiness(id)
     }
     setShowBusinessForm(false); setBizForm({}); loadAll(); flash('Negocio guardado')
@@ -241,8 +241,8 @@ export default function Home() {
 
   const handleDeleteBusiness = async (id: string) => {
     if (!confirm('¿Eliminar este negocio y todos sus datos?')) return
-    await db.transactions.where('businessId').equals(id).delete()
-    await db.businesses.delete(id)
+    await getDB().transactions.where('businessId').equals(id).delete()
+    await getDB().businesses.delete(id)
     if (selectedBusiness === id) setSelectedBusiness(businesses.find(b => b.id !== id)?.id || '')
     loadAll(); flash('Negocio eliminado')
   }
@@ -257,19 +257,19 @@ export default function Home() {
       subcategory: txForm.subcategory, referenceNumber: txForm.referenceNumber, notes: txForm.notes,
       createdAt: new Date().toISOString()
     }
-    if (txForm.id) { await db.transactions.update(txForm.id, { ...data, updatedAt: new Date().toISOString() } as any) }
-    else { await db.transactions.add({ ...data, id: generateId() } as any) }
+    if (txForm.id) { await getDB().transactions.update(txForm.id, { ...data, updatedAt: new Date().toISOString() } as any) }
+    else { await getDB().transactions.add({ ...data, id: generateId() } as any) }
     setShowTransactionForm(false)
     setTxForm({ type: 'INGRESO', category: '', amountCUP: 0, taxDeductible: false, dateStr: new Date().toISOString().split('T')[0] })
     loadAll(); flash('Movimiento registrado')
   }
 
   const handleDeleteTransaction = async (id: string) => {
-    await db.transactions.delete(id); loadAll(); flash('Movimiento eliminado')
+    await getDB().transactions.delete(id); loadAll(); flash('Movimiento eliminado')
   }
 
   const handleSaveExchangeRate = async () => {
-    await db.exchangeRates.add({
+    await getDB().exchangeRates.add({
       ...exForm, id: generateId(), rateUSD: Number(exForm.rateUSD), rateEUR: exForm.rateEUR ? Number(exForm.rateEUR) : undefined,
       rateMLC: exForm.rateMLC ? Number(exForm.rateMLC) : undefined, date: exForm.dateStr || new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString()
@@ -280,16 +280,16 @@ export default function Home() {
   }
 
   const handleToggleAlertRead = async (alert: AlertItem) => {
-    if (alert.id) { await db.alerts.update(alert.id, { isRead: !alert.isRead } as any); loadAll() }
+    if (alert.id) { await getDB().alerts.update(alert.id, { isRead: !alert.isRead } as any); loadAll() }
   }
 
   const handleSaveUser = async () => {
     if (!userForm.username || !userForm.password || !userForm.name) return
     const hash = await simpleHash(userForm.password)
     if (userForm.id) {
-      await db.users.update(userForm.id, { ...userForm, password: hash } as any)
+      await getDB().users.update(userForm.id, { ...userForm, password: hash } as any)
     } else {
-      await db.users.add({ ...userForm, id: generateId(), password: hash, createdAt: new Date().toISOString() } as any)
+      await getDB().users.add({ ...userForm, id: generateId(), password: hash, createdAt: new Date().toISOString() } as any)
     }
     setShowUserForm(false); setUserForm({ role: 'user', isActive: true }); loadAll(); flash('Usuario guardado')
   }
@@ -297,11 +297,11 @@ export default function Home() {
   const handleDeleteUser = async (id: string) => {
     if (id === authUser?.id) return alert('No puede eliminar su propia cuenta')
     if (!confirm('¿Eliminar este usuario?')) return
-    await db.users.delete(id); loadAll(); flash('Usuario eliminado')
+    await getDB().users.delete(id); loadAll(); flash('Usuario eliminado')
   }
 
   const handleToggleUserActive = async (user: User) => {
-    if (user.id) { await db.users.update(user.id, { isActive: !user.isActive } as any); loadAll() }
+    if (user.id) { await getDB().users.update(user.id, { isActive: !user.isActive } as any); loadAll() }
   }
 
   const handleExport = async () => {
@@ -688,7 +688,7 @@ export default function Home() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div><h2 className="text-2xl font-bold text-gray-900">Centro de Alertas</h2><p className="text-gray-500">Notificaciones y sugerencias tributarias</p></div>
                   <div className="flex gap-2">
-                    {unreadAlerts > 0 && <Button variant="outline" size="sm" onClick={async () => { for (const a of alerts.filter(al=>!al.isRead)) if(a.id) await db.alerts.update(a.id,{isRead:true} as any); loadAll() }}><CheckCircle className="h-4 w-4 mr-1" /> Leer todas</Button>}
+                    {unreadAlerts > 0 && <Button variant="outline" size="sm" onClick={async () => { for (const a of alerts.filter(al=>!al.isRead)) if(a.id) await getDB().alerts.update(a.id,{isRead:true} as any); loadAll() }}><CheckCircle className="h-4 w-4 mr-1" /> Leer todas</Button>}
                     <Button variant="outline" size="sm" onClick={loadAll}><RefreshCw className="h-4 w-4 mr-1" /></Button>
                   </div>
                 </div>

@@ -4,7 +4,7 @@ import Dexie, { type Table } from 'dexie'
 export interface Business {
   id?: string
   name: string
-  businessType: string // "MIPYME" | "TCP"
+  businessType: string
   activityType: string
   taxRegime: string
   nif?: string
@@ -19,7 +19,7 @@ export interface Business {
 export interface Transaction {
   id?: string
   businessId: string
-  type: string // "INGRESO" | "GASTO"
+  type: string
   category: string
   subcategory?: string
   description: string
@@ -73,13 +73,16 @@ export interface User {
   id?: string
   username: string
   name: string
-  password: string // hashed
-  role: string // "admin" | "user"
+  password: string
+  role: string
   isActive: boolean
   createdAt?: string
 }
 
-// ─── Database ───────────────────────────────────────────────────────
+// ─── Safe SSR check ─────────────────────────────────────────────────
+const isBrowser = typeof window !== 'undefined' && typeof indexedDB !== 'undefined'
+
+// ─── Database (lazy init) ───────────────────────────────────────────
 class CuentasDB extends Dexie {
   businesses!: Table<Business>
   transactions!: Table<Transaction>
@@ -101,14 +104,27 @@ class CuentasDB extends Dexie {
   }
 }
 
-export const db = new CuentasDB()
+let _db: CuentasDB | null = null
+
+export function getDB(): CuentasDB {
+  if (!isBrowser) {
+    throw new Error('Database not available on server')
+  }
+  if (!_db) {
+    _db = new CuentasDB()
+  }
+  return _db
+}
+
+// Convenience export (only use after checking isBrowser)
+export const db = isBrowser ? new CuentasDB() : null as unknown as CuentasDB
 
 // ─── ID Generator ────────────────────────────────────────────────────
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9)
 }
 
-// ─── Simple Hash (for demo auth - use bcrypt in production) ─────────
+// ─── Simple Hash ─────────────────────────────────────────────────────
 export async function simpleHash(str: string): Promise<string> {
   const encoder = new TextEncoder()
   const data = encoder.encode(str + '_cuentas_precision_salt_2025')
@@ -119,72 +135,17 @@ export async function simpleHash(str: string): Promise<string> {
 
 // ─── Seed Data ───────────────────────────────────────────────────────
 const CUBAN_TAX_RATES: Omit<TaxRate, 'id' | 'createdAt'>[] = [
-  {
-    name: "Impuesto sobre Ingresos Personales (TCP)",
-    code: "IIT_TCP", description: "Aplicable a Trabajadores por Cuenta Propia. Tramo base hasta 50,000 CUP anuales.",
-    rate: 15, minValue: 0, maxValue: 50000, effectiveFrom: "2022-01-01",
-    gacetaRef: "Gaceta Oficial No. 87 Extraordinaria de 25 de noviembre de 2022", category: "TCP"
-  },
-  {
-    name: "Impuesto sobre Ingresos (TCP) - Tramo Superior",
-    code: "IIT_TCP_HIGH", description: "Para ingresos superiores a 50,000 CUP anuales como TCP.",
-    rate: 20, minValue: 50000, maxValue: 100000, effectiveFrom: "2022-01-01",
-    gacetaRef: "Gaceta Oficial No. 87 Extraordinaria de 25 de noviembre de 2022", category: "TCP"
-  },
-  {
-    name: "Contribución a la Seguridad Social (TCP)",
-    code: "CSS_TCP", description: "Aporte del 25% sobre ingresos brutos mensuales para TCP.",
-    rate: 25, minValue: 0, effectiveFrom: "2023-01-01",
-    gacetaRef: "Decreto-Ley 334/2022", category: "TCP"
-  },
-  {
-    name: "Impuesto por Utilización de Fuerza de Trabajo",
-    code: "IUFT", description: "Aplicable a contratistas con trabajadores asalariados.",
-    rate: 5, minValue: 0, effectiveFrom: "2021-01-01",
-    gacetaRef: "Resolución 52/2021", category: "TCP"
-  },
-  {
-    name: "Impuesto sobre Ingresos (MiPYME)",
-    code: "II_MIPYME", description: "Impuesto sobre ingresos para MiPYMEs según Decreto-Ley 345/2023.",
-    rate: 30, minValue: 0, maxValue: 500000, effectiveFrom: "2023-01-01",
-    gacetaRef: "Gaceta Oficial Extraordinaria No. 22 de 16 de marzo de 2023", category: "MIPYME"
-  },
-  {
-    name: "Contribución a la Seguridad Social (MiPYME)",
-    code: "CSS_MIPYME", description: "Aporte patronal del 16.5% sobre nómina bruta mensual.",
-    rate: 16.5, minValue: 0, effectiveFrom: "2023-01-01",
-    gacetaRef: "Decreto-Ley 334/2022", category: "MIPYME"
-  },
-  {
-    name: "Impuesto sobre los Servicios (ITSS)",
-    code: "ITSS", description: "Impuesto sobre la prestación de servicios. Tasa general del 11%.",
-    rate: 11, minValue: 0, effectiveFrom: "2023-01-01",
-    gacetaRef: "Resolución 92/2023", category: "GENERAL"
-  },
-  {
-    name: "Impuesto a la Circulación de Vehículos",
-    code: "ICV", description: "Impuesto anual por circulación de vehículos de motor.",
-    rate: 0, minValue: 100, maxValue: 5000, effectiveFrom: "2023-01-01",
-    gacetaRef: "Resolución 356/2018", category: "GENERAL"
-  },
-  {
-    name: "Impuesto sobre Transmisiones Patrimoniales",
-    code: "ITP", description: "Aplicable a la compraventa de bienes inmuebles y vehículos. 4% del valor.",
-    rate: 4, minValue: 0, effectiveFrom: "2019-01-01",
-    gacetaRef: "Decreto-Ley 308/2013", category: "GENERAL"
-  },
-  {
-    name: "Tasa por Licencia de Actividad (TCP)",
-    code: "TSA_TCP", description: "Tasa anual por el ejercicio de actividad como TCP.",
-    rate: 0, minValue: 500, maxValue: 3000, effectiveFrom: "2022-01-01",
-    gacetaRef: "Resolución 198/2022", category: "TCP"
-  },
-  {
-    name: "Impuesto sobre Utilidades (MiPYME)",
-    code: "IU_MIPYME", description: "Sobre utilidades netas de MiPYMEs. Escala progresiva.",
-    rate: 35, minValue: 0, effectiveFrom: "2023-01-01",
-    gacetaRef: "Decreto-Ley 345/2023", category: "MIPYME"
-  }
+  { name: "Impuesto sobre Ingresos Personales (TCP)", code: "IIT_TCP", description: "Aplicable a Trabajadores por Cuenta Propia. Tramo base hasta 50,000 CUP anuales.", rate: 15, minValue: 0, maxValue: 50000, effectiveFrom: "2022-01-01", gacetaRef: "Gaceta Oficial No. 87 Extraordinaria de 25 de noviembre de 2022", category: "TCP" },
+  { name: "Impuesto sobre Ingresos (TCP) - Tramo Superior", code: "IIT_TCP_HIGH", description: "Para ingresos superiores a 50,000 CUP anuales como TCP.", rate: 20, minValue: 50000, maxValue: 100000, effectiveFrom: "2022-01-01", gacetaRef: "Gaceta Oficial No. 87 Extraordinaria de 25 de noviembre de 2022", category: "TCP" },
+  { name: "Contribución a la Seguridad Social (TCP)", code: "CSS_TCP", description: "Aporte del 25% sobre ingresos brutos mensuales para TCP.", rate: 25, minValue: 0, effectiveFrom: "2023-01-01", gacetaRef: "Decreto-Ley 334/2022", category: "TCP" },
+  { name: "Impuesto por Utilización de Fuerza de Trabajo", code: "IUFT", description: "Aplicable a contratistas con trabajadores asalariados.", rate: 5, minValue: 0, effectiveFrom: "2021-01-01", gacetaRef: "Resolución 52/2021", category: "TCP" },
+  { name: "Impuesto sobre Ingresos (MiPYME)", code: "II_MIPYME", description: "Impuesto sobre ingresos para MiPYMEs según Decreto-Ley 345/2023.", rate: 30, minValue: 0, maxValue: 500000, effectiveFrom: "2023-01-01", gacetaRef: "Gaceta Oficial Extraordinaria No. 22 de 16 de marzo de 2023", category: "MIPYME" },
+  { name: "Contribución a la Seguridad Social (MiPYME)", code: "CSS_MIPYME", description: "Aporte patronal del 16.5% sobre nómina bruta mensual.", rate: 16.5, minValue: 0, effectiveFrom: "2023-01-01", gacetaRef: "Decreto-Ley 334/2022", category: "MIPYME" },
+  { name: "Impuesto sobre los Servicios (ITSS)", code: "ITSS", description: "Impuesto sobre la prestación de servicios. Tasa general del 11%.", rate: 11, minValue: 0, effectiveFrom: "2023-01-01", gacetaRef: "Resolución 92/2023", category: "GENERAL" },
+  { name: "Impuesto a la Circulación de Vehículos", code: "ICV", description: "Impuesto anual por circulación de vehículos de motor.", rate: 0, minValue: 100, maxValue: 5000, effectiveFrom: "2023-01-01", gacetaRef: "Resolución 356/2018", category: "GENERAL" },
+  { name: "Impuesto sobre Transmisiones Patrimoniales", code: "ITP", description: "Aplicable a la compraventa de bienes inmuebles y vehículos. 4% del valor.", rate: 4, minValue: 0, effectiveFrom: "2019-01-01", gacetaRef: "Decreto-Ley 308/2013", category: "GENERAL" },
+  { name: "Tasa por Licencia de Actividad (TCP)", code: "TSA_TCP", description: "Tasa anual por el ejercicio de actividad como TCP.", rate: 0, minValue: 500, maxValue: 3000, effectiveFrom: "2022-01-01", gacetaRef: "Resolución 198/2022", category: "TCP" },
+  { name: "Impuesto sobre Utilidades (MiPYME)", code: "IU_MIPYME", description: "Sobre utilidades netas de MiPYMEs. Escala progresiva.", rate: 35, minValue: 0, effectiveFrom: "2023-01-01", gacetaRef: "Decreto-Ley 345/2023", category: "MIPYME" }
 ]
 
 const SEED_EXCHANGE_RATES: Omit<ExchangeRate, 'id' | 'createdAt'>[] = [
@@ -206,69 +167,41 @@ const SEED_ALERTS: Omit<AlertItem, 'id' | 'createdAt'>[] = [
 ]
 
 export async function seedDatabase() {
-  const taxCount = await db.taxRates.count()
-  if (taxCount === 0) {
-    await db.taxRates.bulkAdd(CUBAN_TAX_RATES)
-  }
-  const exCount = await db.exchangeRates.count()
-  if (exCount === 0) {
-    await db.exchangeRates.bulkAdd(SEED_EXCHANGE_RATES)
-  }
-  const alertCount = await db.alerts.count()
-  if (alertCount === 0) {
-    await db.alerts.bulkAdd(SEED_ALERTS)
-  }
-  // Create default admin user
-  const userCount = await db.users.count()
+  if (!isBrowser) return
+  const database = getDB()
+  const taxCount = await database.taxRates.count()
+  if (taxCount === 0) { await database.taxRates.bulkAdd(CUBAN_TAX_RATES as any) }
+  const exCount = await database.exchangeRates.count()
+  if (exCount === 0) { await database.exchangeRates.bulkAdd(SEED_EXCHANGE_RATES as any) }
+  const alertCount = await database.alerts.count()
+  if (alertCount === 0) { await database.alerts.bulkAdd(SEED_ALERTS as any) }
+  const userCount = await database.users.count()
   if (userCount === 0) {
     const adminHash = await simpleHash('admin123')
-    await db.users.add({
-      username: 'admin',
-      name: 'Administrador',
-      password: adminHash,
-      role: 'admin',
-      isActive: true,
-      createdAt: new Date().toISOString()
-    })
+    await database.users.add({ username: 'admin', name: 'Administrador', password: adminHash, role: 'admin', isActive: true, createdAt: new Date().toISOString() } as any)
   }
 }
 
 // ─── Export / Import ────────────────────────────────────────────────
 export async function exportAllData() {
-  const businesses = await db.businesses.toArray()
-  const transactions = await db.transactions.toArray()
-  const taxRates = await db.taxRates.toArray()
-  const exchangeRates = await db.exchangeRates.toArray()
-  const alerts = await db.alerts.toArray()
-  return {
-    exportDate: new Date().toISOString(),
-    version: '1.0',
-    app: 'CuentasPrecisión',
-    data: { businesses, transactions, taxRates, exchangeRates, alerts }
-  }
+  const database = getDB()
+  const [businesses, transactions, taxRates, exchangeRates, alerts] = await Promise.all([
+    database.businesses.toArray(),
+    database.transactions.toArray(),
+    database.taxRates.toArray(),
+    database.exchangeRates.toArray(),
+    database.alerts.toArray(),
+  ])
+  return { exportDate: new Date().toISOString(), version: '1.0', app: 'CuentasPrecisión', data: { businesses, transactions, taxRates, exchangeRates, alerts } }
 }
 
 export async function importAllData(jsonData: any) {
-  await db.transaction('rw', db.businesses, db.transactions, db.taxRates, db.exchangeRates, db.alerts, async () => {
-    if (jsonData.data?.businesses) {
-      await db.businesses.clear()
-      await db.businesses.bulkAdd(jsonData.data.businesses)
-    }
-    if (jsonData.data?.transactions) {
-      await db.transactions.clear()
-      await db.transactions.bulkAdd(jsonData.data.transactions)
-    }
-    if (jsonData.data?.taxRates) {
-      await db.taxRates.clear()
-      await db.taxRates.bulkAdd(jsonData.data.taxRates)
-    }
-    if (jsonData.data?.exchangeRates) {
-      await db.exchangeRates.clear()
-      await db.exchangeRates.bulkAdd(jsonData.data.exchangeRates)
-    }
-    if (jsonData.data?.alerts) {
-      await db.alerts.clear()
-      await db.alerts.bulkAdd(jsonData.data.alerts)
-    }
+  const database = getDB()
+  await database.transaction('rw', database.businesses, database.transactions, database.taxRates, database.exchangeRates, database.alerts, async () => {
+    if (jsonData.data?.businesses) { await database.businesses.clear(); await database.businesses.bulkAdd(jsonData.data.businesses as any) }
+    if (jsonData.data?.transactions) { await database.transactions.clear(); await database.transactions.bulkAdd(jsonData.data.transactions as any) }
+    if (jsonData.data?.taxRates) { await database.taxRates.clear(); await database.taxRates.bulkAdd(jsonData.data.taxRates as any) }
+    if (jsonData.data?.exchangeRates) { await database.exchangeRates.clear(); await database.exchangeRates.bulkAdd(jsonData.data.exchangeRates as any) }
+    if (jsonData.data?.alerts) { await database.alerts.clear(); await database.alerts.bulkAdd(jsonData.data.alerts as any) }
   })
 }
