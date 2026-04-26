@@ -142,6 +142,8 @@ export default function Home() {
   const [showExchangeForm, setShowExchangeForm] = useState(false)
   const [showUserForm, setShowUserForm] = useState(false)
   const [cupAmount, setCupAmount] = useState('')
+  const [editingRate, setEditingRate] = useState(false)
+  const [quickRate, setQuickRate] = useState('')
   const [bizForm, setBizForm] = useState<Partial<Business>>({})
   const [txForm, setTxForm] = useState<Partial<Transaction> & { dateStr: string }>({
     type: 'INGRESO', category: '', amountCUP: 0, taxDeductible: false, dateStr: new Date().toISOString().split('T')[0]
@@ -284,6 +286,19 @@ export default function Home() {
 
   const handleDeleteTransaction = async (id: string) => {
     const _d = await getDB(); await _d.transactions.delete(id); loadAll(); flash('Movimiento eliminado')
+  }
+
+  const handleQuickRateSave = async () => {
+    const newRate = Number(quickRate)
+    if (!newRate || newRate <= 0) { alert('Ingrese una tasa válida mayor a 0'); return }
+    const _d = await getDB(); await _d.exchangeRates.add({
+      id: generateId(), source: 'Manual', rateUSD: newRate,
+      date: new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString()
+    } as any)
+    setEditingRate(false)
+    setQuickRate('')
+    loadAll(); flash(`Tasa actualizada: 1 USD = ${newRate} CUP`)
   }
 
   const handleSaveExchangeRate = async () => {
@@ -506,11 +521,24 @@ export default function Home() {
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 bg-emerald-100 rounded-xl flex items-center justify-center"><DollarSign className="h-7 w-7 text-emerald-600" /></div>
                         <div>
-                          <p className="text-sm text-emerald-600 font-medium">Tasa de Cambio Referencia</p>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-3xl font-bold text-gray-900">1 USD = {rate.toFixed(2)} CUP</span>
-                            <span className="text-sm text-gray-500">{exchangeRates[0]?.source || 'Referencia'}</span>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm text-emerald-600 font-medium">Tasa de Cambio Referencia</p>
+                            <button onClick={() => { setQuickRate(rate.toFixed(2)); setEditingRate(true) }} className="text-emerald-600 hover:text-emerald-800 transition-colors" title="Editar tasa"><Edit className="h-3.5 w-3.5" /></button>
                           </div>
+                          {editingRate ? (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-lg font-bold text-gray-900">1 USD =</span>
+                              <Input type="number" value={quickRate} onChange={e => setQuickRate(e.target.value)} className="w-28 h-9 text-lg font-bold" autoFocus onKeyDown={e => { if (e.key === 'Enter') handleQuickRateSave(); if (e.key === 'Escape') setEditingRate(false) }} />
+                              <span className="text-lg font-bold text-gray-900">CUP</span>
+                              <Button size="sm" onClick={handleQuickRateSave} className="h-9 bg-emerald-600 hover:bg-emerald-700"><Save className="h-3.5 w-3.5 mr-1" /> OK</Button>
+                              <Button size="sm" variant="ghost" onClick={() => setEditingRate(false)} className="h-9">✕</Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-3xl font-bold text-gray-900">1 USD = {rate.toFixed(2)} CUP</span>
+                              <span className="text-sm text-gray-500">{exchangeRates[0]?.source || 'Referencia'}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
