@@ -134,6 +134,7 @@ export default function CuentasPrecisionApp() {
   const [selectedBusiness, setSelectedBusiness] = useState('')
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+  const [appError, setAppError] = useState<string | null>(null)
 
   // Forms
   const [showBusinessForm, setShowBusinessForm] = useState(false)
@@ -159,7 +160,12 @@ export default function CuentasPrecisionApp() {
   useEffect(() => {
     if (!mounted) return
     ;(async () => {
-      await seedDatabase()
+      try {
+        await seedDatabase()
+      } catch (e: any) {
+        console.error('seedDatabase error:', e)
+        setAppError('Error initializing database: ' + e.message)
+      }
       // Check for existing session
       const session = sessionStorage.getItem('cp_session')
       if (session) {
@@ -174,24 +180,30 @@ export default function CuentasPrecisionApp() {
 
   // ─── Load Data ────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
-    setLoading(true)
-    const d = await getDB()
-    const [bz, tx, tr, er, al, us] = await Promise.all([
-      d.businesses.toArray(),
-      d.transactions.toArray(),
-      d.taxRates.toArray(),
-      d.exchangeRates.orderBy('date').reverse().limit(30).toArray(),
-      d.alerts.orderBy('createdAt').reverse().limit(50).toArray(),
-      d.users.toArray()
-    ])
-    setBusinesses(bz as Business[])
-    setTransactions(tx as Transaction[])
-    setTaxRates(tr as TaxRate[])
-    setExchangeRates(er as ExchangeRate[])
-    setAlerts(al as AlertItem[])
-    setUsers(us as User[])
-    if (bz.length > 0 && !selectedBusiness) setSelectedBusiness((bz[0] as any).id || '')
-    setLoading(false)
+    try {
+      setLoading(true)
+      const d = await getDB()
+      const [bz, tx, tr, er, al, us] = await Promise.all([
+        d.businesses.toArray(),
+        d.transactions.toArray(),
+        d.taxRates.toArray(),
+        d.exchangeRates.orderBy('date').reverse().limit(30).toArray(),
+        d.alerts.orderBy('createdAt').reverse().limit(50).toArray(),
+        d.users.toArray()
+      ])
+      setBusinesses(bz as Business[])
+      setTransactions(tx as Transaction[])
+      setTaxRates(tr as TaxRate[])
+      setExchangeRates(er as ExchangeRate[])
+      setAlerts(al as AlertItem[])
+      setUsers(us as User[])
+      if (bz.length > 0 && !selectedBusiness) setSelectedBusiness((bz[0] as any).id || '')
+    } catch (e: any) {
+      console.error('loadAll error:', e)
+      setAppError('Error loading data: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
   }, [selectedBusiness])
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -342,6 +354,19 @@ export default function CuentasPrecisionApp() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>
           <Skeleton className="h-80 rounded-xl" />
         </div>
+      </div>
+    )
+  }
+
+  // ─── Error Display ──────────────────────────────────────────────
+  if (appError) {
+    return (
+      <div className="min-h-screen bg-red-50 p-8 flex items-center justify-center">
+        <Card className="max-w-lg w-full border-red-200"><CardContent className="p-6">
+          <h2 className="text-lg font-bold text-red-700 mb-2">Error en la aplicación</h2>
+          <pre className="text-sm text-red-600 bg-red-50 p-3 rounded overflow-auto max-h-40">{appError}</pre>
+          <Button onClick={() => { setAppError(null); location.reload() }} className="mt-4">Reintentar</Button>
+        </CardContent></Card>
       </div>
     )
   }
