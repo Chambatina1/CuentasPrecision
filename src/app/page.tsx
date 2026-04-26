@@ -151,6 +151,7 @@ export default function Home() {
   const [userForm, setUserForm] = useState<Partial<User>>({ role: 'user', isActive: true })
   const [successMsg, setSuccessMsg] = useState('')
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   // ─── SSR Guard ─────────────────────────────────────────────────
   useEffect(() => { setMounted(true) }, [])
 
@@ -247,8 +248,7 @@ export default function Home() {
 
   const handleDeleteBusiness = async (id: string) => {
     if (!confirm('¿Eliminar este negocio y todos sus datos?')) return
-    const _d = await getDB(); await _d.transactions.where('businessId').equals(id).delete()
-    const _d = await getDB(); await _d.businesses.delete(id)
+    const _d = await getDB(); await _d.transactions.where('businessId').equals(id).delete(); await _d.businesses.delete(id)
     if (selectedBusiness === id) setSelectedBusiness(businesses.find(b => b.id !== id)?.id || '')
     loadAll(); flash('Negocio eliminado')
   }
@@ -263,8 +263,9 @@ export default function Home() {
       subcategory: txForm.subcategory, referenceNumber: txForm.referenceNumber, notes: txForm.notes,
       createdAt: new Date().toISOString()
     }
-    if (txForm.id) { const _d = await getDB(); await _d.transactions.update(txForm.id, { ...data, updatedAt: new Date().toISOString() } as any) }
-    else { const _d = await getDB(); await _d.transactions.add({ ...data, id: generateId() } as any) }
+    const _d2 = await getDB()
+    if (txForm.id) { await _d2.transactions.update(txForm.id, { ...data, updatedAt: new Date().toISOString() } as any) }
+    else { await _d2.transactions.add({ ...data, id: generateId() } as any) }
     setShowTransactionForm(false)
     setTxForm({ type: 'INGRESO', category: '', amountCUP: 0, taxDeductible: false, dateStr: new Date().toISOString().split('T')[0] })
     loadAll(); flash('Movimiento registrado')
