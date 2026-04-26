@@ -1,5 +1,17 @@
 'use client'
 import dynamic from 'next/dynamic'
+import { useEffect, useState } from 'react'
+
+// Global error capture
+if (typeof window !== 'undefined') {
+  window.onerror = function(msg, url, line, col, err) {
+    document.title = 'ERR: ' + (err?.message || msg)
+    return false
+  }
+  window.addEventListener('unhandledrejection', function(e) {
+    document.title = 'REJ: ' + (e.reason?.message || String(e.reason))
+  })
+}
 
 const CuentasPrecisionApp = dynamic(
   () => import('./client-app'),
@@ -22,5 +34,28 @@ const CuentasPrecisionApp = dynamic(
 )
 
 export default function Home() {
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const checkTitle = setInterval(() => {
+      const t = document.title
+      if (t.startsWith('ERR:') || t.startsWith('REJ:')) {
+        setError(t.substring(4))
+        document.title = 'CuentasPrecisión'
+      }
+    }, 500)
+    return () => clearInterval(checkTitle)
+  }, [])
+
+  if (error) {
+    return (
+      <div style={{ padding: 40, background: '#fef2f2', minHeight: '100vh' }}>
+        <h2 style={{ color: '#dc2626' }}>Error detectado:</h2>
+        <pre style={{ color: '#991b1b', fontSize: 14 }}>{error}</pre>
+        <button onClick={() => { setError(''); location.reload() }} style={{ marginTop: 20, padding: '8px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 4 }}>Reintentar</button>
+      </div>
+    )
+  }
+
   return <CuentasPrecisionApp />
 }
