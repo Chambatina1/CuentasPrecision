@@ -1,5 +1,3 @@
-import Dexie, { type Table } from 'dexie'
-
 // ─── Types ───────────────────────────────────────────────────────────
 export interface Business {
   id?: string
@@ -79,45 +77,42 @@ export interface User {
   createdAt?: string
 }
 
-// ─── Safe SSR check ─────────────────────────────────────────────────
-const isBrowser = typeof window !== 'undefined' && typeof indexedDB !== 'undefined'
+// ─── Lazy Database (NO top-level Dexie import) ──────────────────────
+let _db: any = null
 
-// ─── Database (lazy init) ───────────────────────────────────────────
-class CuentasDB extends Dexie {
-  businesses!: Table<Business>
-  transactions!: Table<Transaction>
-  taxRates!: Table<TaxRate>
-  exchangeRates!: Table<ExchangeRate>
-  alerts!: Table<AlertItem>
-  users!: Table<User>
+async function getDBInternal() {
+  if (_db) return _db
+  const Dexie = (await import('dexie')).default
 
-  constructor() {
-    super('CuentasPrecisionDB')
-    this.version(1).stores({
-      businesses: '++id, name, businessType, activityType, createdAt',
-      transactions: '++id, businessId, type, category, date, createdAt',
-      taxRates: '++id, code, category',
-      exchangeRates: '++id, source, date, createdAt',
-      alerts: '++id, type, severity, isRead, createdAt',
-      users: '++id, username, role, isActive'
-    })
+  class CuentasDB extends Dexie {
+    businesses!: any
+    transactions!: any
+    taxRates!: any
+    exchangeRates!: any
+    alerts!: any
+    users!: any
+
+    constructor() {
+      super('CuentasPrecisionDB')
+      this.version(1).stores({
+        businesses: '++id, name, businessType, activityType, createdAt',
+        transactions: '++id, businessId, type, category, date, createdAt',
+        taxRates: '++id, code, category',
+        exchangeRates: '++id, source, date, createdAt',
+        alerts: '++id, type, severity, isRead, createdAt',
+        users: '++id, username, role, isActive'
+      })
+    }
   }
-}
 
-let _db: CuentasDB | null = null
-
-export function getDB(): CuentasDB {
-  if (!isBrowser) {
-    throw new Error('Database not available on server')
-  }
-  if (!_db) {
-    _db = new CuentasDB()
-  }
+  _db = new CuentasDB()
   return _db
 }
 
-// Convenience export (only use after checking isBrowser)
-export const db = isBrowser ? new CuentasDB() : null as unknown as CuentasDB
+export async function getDB() {
+  if (typeof window === 'undefined') throw new Error('Not available on server')
+  return getDBInternal()
+}
 
 // ─── ID Generator ────────────────────────────────────────────────────
 export function generateId(): string {
@@ -134,7 +129,7 @@ export async function simpleHash(str: string): Promise<string> {
 }
 
 // ─── Seed Data ───────────────────────────────────────────────────────
-const CUBAN_TAX_RATES: Omit<TaxRate, 'id' | 'createdAt'>[] = [
+const CUBAN_TAX_RATES = [
   { name: "Impuesto sobre Ingresos Personales (TCP)", code: "IIT_TCP", description: "Aplicable a Trabajadores por Cuenta Propia. Tramo base hasta 50,000 CUP anuales.", rate: 15, minValue: 0, maxValue: 50000, effectiveFrom: "2022-01-01", gacetaRef: "Gaceta Oficial No. 87 Extraordinaria de 25 de noviembre de 2022", category: "TCP" },
   { name: "Impuesto sobre Ingresos (TCP) - Tramo Superior", code: "IIT_TCP_HIGH", description: "Para ingresos superiores a 50,000 CUP anuales como TCP.", rate: 20, minValue: 50000, maxValue: 100000, effectiveFrom: "2022-01-01", gacetaRef: "Gaceta Oficial No. 87 Extraordinaria de 25 de noviembre de 2022", category: "TCP" },
   { name: "Contribución a la Seguridad Social (TCP)", code: "CSS_TCP", description: "Aporte del 25% sobre ingresos brutos mensuales para TCP.", rate: 25, minValue: 0, effectiveFrom: "2023-01-01", gacetaRef: "Decreto-Ley 334/2022", category: "TCP" },
@@ -148,7 +143,7 @@ const CUBAN_TAX_RATES: Omit<TaxRate, 'id' | 'createdAt'>[] = [
   { name: "Impuesto sobre Utilidades (MiPYME)", code: "IU_MIPYME", description: "Sobre utilidades netas de MiPYMEs. Escala progresiva.", rate: 35, minValue: 0, effectiveFrom: "2023-01-01", gacetaRef: "Decreto-Ley 345/2023", category: "MIPYME" }
 ]
 
-const SEED_EXCHANGE_RATES: Omit<ExchangeRate, 'id' | 'createdAt'>[] = [
+const SEED_EXCHANGE_RATES = [
   { source: "El Toque", rateUSD: 340, rateEUR: 370, rateMLC: 340, date: "2025-01-15" },
   { source: "El Toque", rateUSD: 350, rateEUR: 380, rateMLC: 350, date: "2025-02-15" },
   { source: "Atales", rateUSD: 355, rateEUR: 385, rateMLC: 355, date: "2025-03-15" },
@@ -156,52 +151,47 @@ const SEED_EXCHANGE_RATES: Omit<ExchangeRate, 'id' | 'createdAt'>[] = [
   { source: "Atales", rateUSD: 370, rateEUR: 400, rateMLC: 370, date: "2025-04-20" },
 ]
 
-const SEED_ALERTS: Omit<AlertItem, 'id' | 'createdAt'>[] = [
+const SEED_ALERTS = [
   { type: "INFO", title: "Bienvenido a CuentasPrecisión", message: "Configure su negocio para comenzar a llevar sus libros contables. Registre su MiPYME o actividad como TCP para recibir asesoría tributaria personalizada.", severity: "INFO", isRead: false },
   { type: "TAX_DEADLINE", title: "Vencimiento de declaración fiscal", message: "Las declaraciones fiscales mensuales deben presentarse antes del día 15 de cada mes. Mantenga sus registros actualizados para evitar recargos del 10% por tardanza.", severity: "HIGH", isRead: false },
   { type: "SAVING_OPPORTUNITY", title: "Maximice sus deducciones", message: "Los gastos de materia prima, alquileres, servicios públicos y depreciación de equipos son deducibles del impuesto sobre ingresos. Registre correctamente cada gasto para maximizar su beneficio fiscal.", severity: "MEDIUM", isRead: false },
-  { type: "SUGGESTION", title: "Separe sus cuentas personales y de negocio", message: "Mantenga una cuenta bancaria separada para su actividad económica. Esto facilita el control contable, la presentación de declaraciones ante la ONAT y demuestra seriedad ante auditorías.", severity: "LOW", isRead: false },
-  { type: "WARNING", title: "Actualización normativa tributaria", message: "Se han publicado nuevas regulaciones en Gaceta Oficial. Verifique las tasas vigentes en el módulo de Impuestos para asegurar cumplimiento total de las obligaciones fiscales vigentes en Cuba.", severity: "MEDIUM", isRead: false },
-  { type: "TAX_DEADLINE", title: "Contribución a la Seguridad Social", message: "El vencimiento del aporte a la Seguridad Social es el día 10 de cada mes para TCP (25% de ingresos brutos). El pago extemporáneo genera intereses moratorios.", severity: "HIGH", isRead: false },
-  { type: "SUGGESTION", title: "Optimice su régimen tributario", message: "Si sus ingresos anuales superan los 50,000 CUP, considere la formalización como MiPYME para acceder a tasas diferenciadas y beneficios adicionales.", severity: "MEDIUM", isRead: false }
+  { type: "SUGGESTION", title: "Separe sus cuentas personales y de negocio", message: "Mantenga una cuenta bancaria separada para su actividad económica. Esto facilita el control contable.", severity: "LOW", isRead: false },
+  { type: "WARNING", title: "Actualización normativa tributaria", message: "Se han publicado nuevas regulaciones en Gaceta Oficial. Verifique las tasas vigentes en el módulo de Impuestos.", severity: "MEDIUM", isRead: false },
+  { type: "TAX_DEADLINE", title: "Contribución a la Seguridad Social", message: "El vencimiento del aporte a la Seguridad Social es el día 10 de cada mes para TCP (25% de ingresos brutos).", severity: "HIGH", isRead: false },
+  { type: "SUGGESTION", title: "Optimice su régimen tributario", message: "Si sus ingresos anuales superan los 50,000 CUP, considere la formalización como MiPYME.", severity: "MEDIUM", isRead: false }
 ]
 
 export async function seedDatabase() {
-  if (!isBrowser) return
-  const database = getDB()
+  const database = await getDB()
   const taxCount = await database.taxRates.count()
-  if (taxCount === 0) { await database.taxRates.bulkAdd(CUBAN_TAX_RATES as any) }
+  if (taxCount === 0) await database.taxRates.bulkAdd(CUBAN_TAX_RATES)
   const exCount = await database.exchangeRates.count()
-  if (exCount === 0) { await database.exchangeRates.bulkAdd(SEED_EXCHANGE_RATES as any) }
+  if (exCount === 0) await database.exchangeRates.bulkAdd(SEED_EXCHANGE_RATES)
   const alertCount = await database.alerts.count()
-  if (alertCount === 0) { await database.alerts.bulkAdd(SEED_ALERTS as any) }
+  if (alertCount === 0) await database.alerts.bulkAdd(SEED_ALERTS)
   const userCount = await database.users.count()
   if (userCount === 0) {
     const adminHash = await simpleHash('admin123')
-    await database.users.add({ username: 'admin', name: 'Administrador', password: adminHash, role: 'admin', isActive: true, createdAt: new Date().toISOString() } as any)
+    await database.users.add({ username: 'admin', name: 'Administrador', password: adminHash, role: 'admin', isActive: true, createdAt: new Date().toISOString() })
   }
 }
 
-// ─── Export / Import ────────────────────────────────────────────────
 export async function exportAllData() {
-  const database = getDB()
+  const database = await getDB()
   const [businesses, transactions, taxRates, exchangeRates, alerts] = await Promise.all([
-    database.businesses.toArray(),
-    database.transactions.toArray(),
-    database.taxRates.toArray(),
-    database.exchangeRates.toArray(),
-    database.alerts.toArray(),
+    database.businesses.toArray(), database.transactions.toArray(), database.taxRates.toArray(),
+    database.exchangeRates.toArray(), database.alerts.toArray(),
   ])
   return { exportDate: new Date().toISOString(), version: '1.0', app: 'CuentasPrecisión', data: { businesses, transactions, taxRates, exchangeRates, alerts } }
 }
 
 export async function importAllData(jsonData: any) {
-  const database = getDB()
+  const database = await getDB()
   await database.transaction('rw', database.businesses, database.transactions, database.taxRates, database.exchangeRates, database.alerts, async () => {
-    if (jsonData.data?.businesses) { await database.businesses.clear(); await database.businesses.bulkAdd(jsonData.data.businesses as any) }
-    if (jsonData.data?.transactions) { await database.transactions.clear(); await database.transactions.bulkAdd(jsonData.data.transactions as any) }
-    if (jsonData.data?.taxRates) { await database.taxRates.clear(); await database.taxRates.bulkAdd(jsonData.data.taxRates as any) }
-    if (jsonData.data?.exchangeRates) { await database.exchangeRates.clear(); await database.exchangeRates.bulkAdd(jsonData.data.exchangeRates as any) }
-    if (jsonData.data?.alerts) { await database.alerts.clear(); await database.alerts.bulkAdd(jsonData.data.alerts as any) }
+    if (jsonData.data?.businesses) { await database.businesses.clear(); await database.businesses.bulkAdd(jsonData.data.businesses) }
+    if (jsonData.data?.transactions) { await database.transactions.clear(); await database.transactions.bulkAdd(jsonData.data.transactions) }
+    if (jsonData.data?.taxRates) { await database.taxRates.clear(); await database.taxRates.bulkAdd(jsonData.data.taxRates) }
+    if (jsonData.data?.exchangeRates) { await database.exchangeRates.clear(); await database.exchangeRates.bulkAdd(jsonData.data.exchangeRates) }
+    if (jsonData.data?.alerts) { await database.alerts.clear(); await database.alerts.bulkAdd(jsonData.data.alerts) }
   })
 }
