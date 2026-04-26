@@ -1,0 +1,17 @@
+{
+  "name": "CuentasPrecisión",
+  "short_name": "CuentasP",
+  "description": "Contabilidad tributaria para MiPYMEs y TCP en Cuba",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#047857",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
